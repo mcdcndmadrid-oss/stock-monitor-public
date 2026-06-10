@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "updated_at": null,
+  "tickers": {
+    "AAPL": {
+      "ticker": "AAPL",
+      "name": "Example Inc.",
+      "revenue_growth_yoy": null,
+      "eps_growth_yoy": null,
+      "fcf_growth_yoy": null,
+      "gross_margin": null,
+      "operating_margin": null,
+      "net_margin": null,
+      "roe": null,
+      "roic": null,
+      "fcf_margin": null,
+      "debt_to_equity": null,
+      "net_debt_ebitda": null,
+      "interest_coverage": null,
+      "current_ratio": null,
+      "forward_pe": null,
+      "peg": null,
+      "ev_ebitda": null,
+      "price_sales": null,
+      "price_fcf": null,
+      "fundamental_momentum": "ESTABLE",
+      "notes": ""
+    }
+  }
+}
