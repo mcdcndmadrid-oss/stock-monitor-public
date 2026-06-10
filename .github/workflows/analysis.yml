@@ -1,0 +1,88 @@
+name: Analyze EMA Ticker
+
+# Corre en el repo PÚBLICO — consume minutos gratuitos ilimitados.
+# Lee y escribe datos en el repo PRIVADO mediante PRIVATE_DATA_REPO_PAT.
+#
+# Variable de repo necesaria:
+#   DATA_REPO = tu_usuario/stock-monitor-data
+#
+# Secrets necesarios:
+#   PRIVATE_DATA_REPO_PAT — fine-grained PAT con Contents R/W sobre DATA_REPO
+#   ANTHROPIC_API_KEY
+#   TELEGRAM_BOT_TOKEN
+#   TELEGRAM_CHAT_ID
+
+on:
+  workflow_dispatch:
+    inputs:
+      ticker:
+        description: "Ticker a analizar"
+        required: true
+        type: string
+      strategy:
+        description: "Estrategia"
+        required: false
+        default: "ema_20_50"
+        type: string
+
+concurrency:
+  group: analyze-ema-${{ inputs.ticker }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout public code
+        uses: actions/checkout@v4
+
+      - name: Checkout private data
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.DATA_REPO }}
+          token: ${{ secrets.PRIVATE_DATA_REPO_PAT }}
+          path: private-data
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Load private data
+        run: |
+          cp private-data/portfolio_state.json . 2>/dev/null || echo "WARN: portfolio_state.json no encontrado"
+          cp private-data/analysis_log.json    . 2>/dev/null || echo "WARN: analysis_log.json no encontrado (primera ejecución)"
+
+      - name: Run EMA analysis
+        env:
+          ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python analyze_ticker.py --ticker "${{ inputs.ticker }}" --strategy "${{ inputs.strategy }}"
+
+      - name: Save outputs to private data repo
+        run: |
+          cp analysis_log.json private-data/ 2>/dev/null || true
+
+      - name: Commit to private data repo
+        working-directory: private-data
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add analysis_log.json 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "No analysis changes to commit"
+          else
+            git commit -m "chore: add EMA analysis ${{ inputs.ticker }}"
+            git pull --rebase origin main
+            git push
+          fi

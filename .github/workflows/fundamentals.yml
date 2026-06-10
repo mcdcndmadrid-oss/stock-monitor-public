@@ -1,0 +1,67 @@
+name: Fundamentals
+
+# Corre en el repo PÚBLICO — consume minutos gratuitos ilimitados.
+# Lee y escribe datos en el repo PRIVADO mediante PRIVATE_DATA_REPO_PAT.
+#
+# Variable de repo necesaria:
+#   DATA_REPO = tu_usuario/stock-monitor-data
+#
+# Secrets necesarios:
+#   PRIVATE_DATA_REPO_PAT — fine-grained PAT con Contents R/W sobre DATA_REPO
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fundamentals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout public code
+        uses: actions/checkout@v4
+
+      - name: Checkout private data
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.DATA_REPO }}
+          token: ${{ secrets.PRIVATE_DATA_REPO_PAT }}
+          path: private-data
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Load private data
+        run: |
+          cp private-data/fundamentals.json    . 2>/dev/null || echo "WARN: fundamentals.json no encontrado"
+          cp private-data/portfolio_state.json . 2>/dev/null || echo "WARN: portfolio_state.json no encontrado"
+
+      - name: Run fundamentals
+        run: python fundamentals.py
+
+      - name: Save outputs to private data repo
+        run: |
+          cp fundamentals_state.json private-data/ 2>/dev/null || true
+
+      - name: Commit to private data repo
+        working-directory: private-data
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add fundamentals_state.json 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "No fundamentals changes to commit"
+          else
+            git commit -m "chore: update fundamentals state"
+            git pull --rebase origin main
+            git push
+          fi

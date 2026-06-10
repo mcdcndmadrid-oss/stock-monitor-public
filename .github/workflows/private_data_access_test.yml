@@ -1,0 +1,47 @@
+name: Private Data Access Test
+
+# Verifica que PRIVATE_DATA_REPO_PAT puede leer y escribir en el repo privado de datos.
+# Ejecutar UNA VEZ después de crear el PAT y añadirlo como secret.
+# Eliminar o deshabilitar este workflow cuando el acceso esté confirmado.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout private data repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.DATA_REPO }}
+          token: ${{ secrets.PRIVATE_DATA_REPO_PAT }}
+          path: private-data
+
+      - name: Verify read access
+        run: |
+          echo "Archivos en el repo privado:"
+          ls -la private-data/
+          echo ""
+          if [ -f private-data/portfolio.json ]; then
+            SIZE=$(wc -c < private-data/portfolio.json)
+            echo "OK — portfolio.json existe, tamaño: ${SIZE} bytes"
+          else
+            echo "WARN — portfolio.json no encontrado (repo vacío o nombre incorrecto)"
+          fi
+
+      - name: Verify write access (test commit)
+        working-directory: private-data
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          echo "{ \"access_test\": true, \"ts\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" }" > access_test.json
+          git add access_test.json
+          git commit -m "chore: private data access test [skip ci]"
+          git push
+          echo "OK — escritura en repo privado confirmada"
+          git rm access_test.json
+          git commit -m "chore: remove access test file [skip ci]"
+          git push
+          echo "OK — limpieza completada"

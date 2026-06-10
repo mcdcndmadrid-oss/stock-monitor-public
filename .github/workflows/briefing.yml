@@ -1,0 +1,78 @@
+name: Daily Market News Digest
+
+# Corre en el repo PÚBLICO — los minutos de repo público son gratuitos e ilimitados.
+# Lee y escribe datos en el repo PRIVADO mediante PRIVATE_DATA_REPO_PAT.
+#
+# Variable de repo necesaria:
+#   DATA_REPO = tu_usuario/stock-monitor-data
+#
+# Secrets necesarios:
+#   PRIVATE_DATA_REPO_PAT — fine-grained PAT con Contents R/W sobre DATA_REPO
+#   TELEGRAM_BOT_TOKEN
+#   TELEGRAM_CHAT_ID
+#   MARKETAUX_API_KEY
+
+on:
+  schedule:
+    # ── Hora Madrid verano (CEST = UTC+2) ────────────────────────────────────
+    - cron: '30 5 * * 1-5'   # 07:30 Madrid — apertura mercados europeos
+    - cron: '30 13 * * 1-5'  # 15:30 Madrid — cierre europeo / apertura NY
+    # ── Hora Madrid invierno (CET = UTC+1) — descomenta y comenta las de arriba:
+    # - cron: '30 6 * * 1-5'
+    # - cron: '30 14 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout public code
+        uses: actions/checkout@v4
+
+      - name: Checkout private data
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.DATA_REPO }}
+          token: ${{ secrets.PRIVATE_DATA_REPO_PAT }}
+          path: private-data
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Load private data
+        run: |
+          cp private-data/digest_state.json . 2>/dev/null || echo "WARN: digest_state.json no encontrado (primera ejecución)"
+
+      - name: Run news digest
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          MARKETAUX_API_KEY:  ${{ secrets.MARKETAUX_API_KEY }}
+        run: python news_digest.py
+
+      - name: Save outputs to private data repo
+        run: |
+          cp digest_state.json private-data/ 2>/dev/null || true
+
+      - name: Commit to private data repo
+        working-directory: private-data
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -f digest_state.json ]; then
+            git add digest_state.json
+            git diff --staged --quiet || (git commit -m "chore: update digest state [skip ci]" && git push)
+          else
+            echo "digest_state.json no existe; no hay estado que commitear"
+          fi

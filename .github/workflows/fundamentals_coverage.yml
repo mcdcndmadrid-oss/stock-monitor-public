@@ -1,0 +1,67 @@
+name: Fundamentals Coverage Diagnostic
+
+# Corre en el repo PÚBLICO — consume minutos gratuitos ilimitados.
+# Lee y escribe datos en el repo PRIVADO mediante PRIVATE_DATA_REPO_PAT.
+#
+# Variable de repo necesaria:
+#   DATA_REPO = tu_usuario/stock-monitor-data
+#
+# Secrets necesarios:
+#   PRIVATE_DATA_REPO_PAT — fine-grained PAT con Contents R/W sobre DATA_REPO
+#   FMP_API_KEY           — opcional; sin él solo usa yfinance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout public code
+        uses: actions/checkout@v4
+
+      - name: Checkout private data
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.DATA_REPO }}
+          token: ${{ secrets.PRIVATE_DATA_REPO_PAT }}
+          path: private-data
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Load private data
+        run: |
+          cp private-data/portfolio.json . 2>/dev/null || echo "WARN: portfolio.json no encontrado"
+
+      - name: Run coverage diagnostic
+        env:
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+        run: python fundamentals_coverage.py
+
+      - name: Save outputs to private data repo
+        run: |
+          cp coverage_report.json private-data/ 2>/dev/null || true
+
+      - name: Commit to private data repo
+        working-directory: private-data
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add coverage_report.json 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "No coverage changes to commit"
+          else
+            git commit -m "chore: update coverage_report.json [skip ci]"
+            git push
+          fi
