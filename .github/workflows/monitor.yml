@@ -15,6 +15,11 @@ name: Stock Monitor
 #   MARKETAUX_API_KEY
 
 on:
+  schedule:
+    # ── Verano CEST (UTC+2): 07:00–23:45 Madrid, L–V ─────────────────────────
+    - cron: '*/15 5-21 * * 1-5'
+    # ── Invierno CET (UTC+1): descomenta la siguiente y comenta la anterior ───
+    # - cron: '*/15 6-22 * * 1-5'
   workflow_dispatch:
 
 permissions:
